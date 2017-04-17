@@ -2,13 +2,15 @@
 
 #define RESET_PIN   3
 #define WAKEUP_PIN  A0
+#define INDICATION_PIN A1
 
 
 /** Construction function
 */
 Swc11b::Swc11b():
   _wakeupPin(WAKEUP_PIN),
-  _resetPin(RESET_PIN)
+  _resetPin(RESET_PIN),
+  _indicationPin(INDICATION_PIN)
 {
 }
 
@@ -145,10 +147,12 @@ void Swc11b::begin(void)
 {
   pinMode(_resetPin, OUTPUT);
   pinMode(_wakeupPin, OUTPUT);
+  pinMode(_indicationPin, INPUT);
+  
   digitalWrite(_resetPin, HIGH);
   digitalWrite(_wakeupPin, HIGH);
   reset();
-  
+
   lineFifoFlush();
   _lineBuffLen = 0;
   Serial1.begin(9600);
@@ -178,11 +182,23 @@ void Swc11b::reset(void)
 
 /** Function for wakeup the Swc11b
 */
-void Swc11b::wakeup(void)
+int Swc11b::wakeup(void)
 {
+  int timeout = 500;
+  unsigned long timeStart = 0;
+  timeStart = millis();
+  
   digitalWrite(_wakeupPin, LOW);
   delay(100);
   digitalWrite(_wakeupPin, HIGH);
+
+   while (digitalRead(_indicationPin) == LOW) {
+    if ((timeout == 0) || ((millis() - timeStart ) > timeout)) {
+      return SWC11B_ERR_TIMEOUT;
+    }
+    delay(1);
+  }
+  return SWC11B_OK;
 }
 
 /** Function for make the Swc11b enter sleep mode
@@ -262,7 +278,7 @@ int Swc11b::readBytes(byte *pData, int len)
   return SWC11B_OK;
 }
 
-/** Function for send data via ble interface of Swc11b.
+/** Function for sending data via ble interface of Swc11b.
 */
 int Swc11b::sendBleDtu(byte *pData, int len)
 {
@@ -277,6 +293,25 @@ int Swc11b::sendBleDtu(byte *pData, int len)
     sendDataWithoutResponse(hexBuff, 2);
   }
   ret = sendData(crcf, 2, "OK", 500);
+  if (SWC11B_OK != ret) {
+    return ret;
+  }
+  return SWC11B_OK;
+}
+
+/** Function for setting ble advertising data of Swc11b
+*/
+int Swc11b::setBleAdvertisingData(byte *pData, int len)
+{
+  int ret;
+  char buff[50] = {0};
+
+  sprintf(buff, "AT+BD=%u", len);
+  ret = sendCmd(buff, ">>>", 500);
+  if (SWC11B_OK != ret) {
+    return ret;
+  }
+  ret = sendData(pData, len, "OK", 500);
   if (SWC11B_OK != ret) {
     return ret;
   }

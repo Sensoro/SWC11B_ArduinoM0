@@ -31,6 +31,7 @@ class Swc11b {
   private:
     int _wakeupPin;
     int _resetPin;
+    int _indicationPin;
 
     line_t _lineFifo[LINE_FIFO_SIZE];
     int _lineFifoHead;
@@ -89,7 +90,7 @@ class Swc11b {
 
     /** Function for resetting the Swc11b
     */
-    void wakeup(void);
+    int wakeup(void);
 
     /** Function for make the Swc11b enter sleep mode
     */
@@ -146,6 +147,17 @@ class Swc11b {
                   SWC11B_ERR_UNKNOWN    Receiving unknown command response
     */
     int sendBleDtu(byte *pData, int len);
+
+     /** Function for setting ble advertising data of Swc11b
+
+        @param[in]   pData   Pointer of the data buffer
+        @param[in]    len    Length of data
+
+        @return   SWC11B_OK             Command is executed successfully
+                  SWC11B_ERR_TIMEOUT    Timeout to receive command response
+                  SWC11B_ERR_UNKNOWN    Receiving unknown command response
+    */
+    int setBleAdvertisingData(byte *pData, int len);
 
 };
 

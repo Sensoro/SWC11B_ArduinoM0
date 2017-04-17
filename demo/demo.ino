@@ -54,7 +54,7 @@ void setup() {
 
   Scheduler.startLoop(swc11bLoop);
 
-  SerialUSB.println("setup done!");
+  SerialUSB.println("setup done!\n");
 }
 
 void loop() {
@@ -69,20 +69,35 @@ void loop() {
 
   if (mTxData) {
     mTxData = false;
-    SerialUSB.println("tx data");
 
-    swc11b.wakeup();
+    SerialUSB.println("wake up swc11b");
+    if (SWC11B_OK != swc11b.wakeup()) {
+      SerialUSB.println("wakeup error!!!");
+      return;
+    }
 
+    // Getting temperature and humidity from sensor.
+    SerialUSB.println("read sensor data");
     byte data[8] = {0};
     SHT3XD_Result shtResult = tempHumiSensor.readTempAndHumidity(REPEATABILITY_LOW, MODE_CLOCK_STRETCH, 50);
     if ( SHT3XD_NO_ERROR == shtResult.error) {
       SerialUSB.print("temp ="); SerialUSB.println(shtResult.t);
       SerialUSB.print("humi ="); SerialUSB.println(shtResult.rh);
+
+      // Putting data in buffer
       memcpy(data, &shtResult.t, 4);
       memcpy(&data[4], &shtResult.rh, 4);
     }
 
+    // Setting ble advertising data.
+    SerialUSB.println("set ble advertising");
+    if (SWC11B_OK != swc11b.setBleAdvertisingData(data, sizeof(data))) {
+      SerialUSB.println("swc11b.setBleAdvertisingData error!!!");
+      return;
+    }
+
     // Sending data via the swc11b
+    SerialUSB.println("send data");
     if (SWC11B_OK != swc11b.send(data, sizeof(data), 0)) {
       SerialUSB.println("swc11b.send error!!!");
       return;
@@ -91,11 +106,11 @@ void loop() {
 
   if (mTxDone) {
     mTxDone = false;
-    SerialUSB.println("tx done");
+    SerialUSB.println("send done");
 
     int result = 0;
     sscanf(mSentResultBuff, "+SEND:%u", &result);
-    SerialUSB.print("+SEND:");SerialUSB.println(result);
+    SerialUSB.print("+SEND:"); SerialUSB.println(result);
     memset(mSentResultBuff, 0, sizeof(mSentResultBuff));
 
     // Checking if there is data available
@@ -106,7 +121,7 @@ void loop() {
     }
 
     if (availableLen > 0) {
-      SerialUSB.print(availableLen);SerialUSB.println(" bytes data available");
+      SerialUSB.print(availableLen); SerialUSB.println(" bytes data available");
 
       // Reading data
       byte data[64];
@@ -214,7 +229,7 @@ void dumpData(void *pData, int len)
 {
   byte *p = (byte *)pData;
   for (int i = 0; i < len; i++) {
-    SerialUSB.print("0x");SerialUSB.print(p[i], HEX);SerialUSB.print(' ');
+    SerialUSB.print("0x"); SerialUSB.print(p[i], HEX); SerialUSB.print(' ');
   }
   SerialUSB.println();
 }
