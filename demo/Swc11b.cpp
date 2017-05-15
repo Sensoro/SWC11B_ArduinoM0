@@ -67,7 +67,7 @@ int Swc11b::waitResponse(const char *pResp, byte *pOutData, int *pOutLen, unsign
     if ((timeout == 0) || ((millis() - timeStart ) > timeout)) {
       return SWC11B_ERR_TIMEOUT;
     }
-    delay(1);
+    delay(5);
   }
   if (!memcmp(line.data, pResp, strlen(pResp))) {
     if (pOutData != NULL && pOutLen != NULL) {
@@ -91,7 +91,7 @@ int Swc11b::waitChunkResponse(int len, byte* pOutBuff, int* pOutLen, unsigned lo
     if ((timeout == 0) || ((millis() - timeStart ) > timeout)) {
       return SWC11B_ERR_TIMEOUT;
     }
-    delay(1);
+    delay(5);
   }
   if (line.len >= len) {
     if (pOutBuff != NULL && pOutLen != NULL) {
@@ -196,7 +196,7 @@ int Swc11b::wakeup(void)
     if ((timeout == 0) || ((millis() - timeStart ) > timeout)) {
       return SWC11B_ERR_TIMEOUT;
     }
-    delay(1);
+    delay(5);
   }
   return SWC11B_OK;
 }
@@ -336,7 +336,7 @@ void Swc11b::receiveBytes(void)
     }
     if (crGet && ch == '\n') {
       crGet = false;
-
+     
       // delete "\r\n"
       _lineBuff[_lineBuffLen - 1] = 0;
       _lineBuff[_lineBuffLen - 2] = 0;
@@ -361,6 +361,7 @@ void Swc11b::receiveBytes(void)
           // Fifo full, do something
         }
       }
+      
       memset(_lineBuff, 0, sizeof(_lineBuff));
       _lineBuffLen = 0;
     }

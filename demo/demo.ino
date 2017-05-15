@@ -1,11 +1,12 @@
-#include <Scheduler.h>
+#include "ZeroTimer.h"
 #include <Wire.h>
 #include "Swc11b.h"
 #include "SHT3XD.h"
+#include "log.h"
 
 #define TX_INTERVAL   10000 // 10s
-
 #define SHT3XD_I2CADDR      0X44
+#define LEDPIN              13
 
 Swc11b swc11b;
 SHT3XD tempHumiSensor(SHT3XD_I2CADDR);
@@ -33,36 +34,36 @@ void swc11bBleDtuCallback(char *result) {
 
 void setup() {
 
-  SerialUSB.begin(115200);
-  while (!SerialUSB);
-  SerialUSB.println("setup");
-
+  log_init();  
+  log_println("setup");
+  
   Wire.begin();
 
   // Initializing sensor.
   if ( SHT3XD_NO_ERROR != tempHumiSensor.begin() ) {
-    SerialUSB.println("Failed to begin temp&humi sensoro!");
+    log_println("Failed to begin temp&humi sensoro!");
     while (1);
   }
-  SerialUSB.println("tempHumiSensor init success!");
+  log_println("tempHumiSensor init success!");
 
   // Initializing swc11b.
   swc11b.setSentCallback(swc11bSentCallback);
   swc11b.setBleDtuCallback(swc11bBleDtuCallback);
   swc11b.begin();
-  SerialUSB.println("swc11b init success!");
+  log_println("swc11b init success!");
 
-  Scheduler.startLoop(swc11bLoop);
+  // call swc11bLoop evert 10ms
+  TC.startTimer(10000, swc11bLoop);
 
-  SerialUSB.println("setup done!\n");
+  log_println("setup done!\n");
 }
 
 void loop() {
   if (mGetInfo) {
     mGetInfo = false;
     if (SWC11B_OK != swc11b.ping()) {
-      SerialUSB.println("swc11b.ping error!!!");
-      return;
+      log_println("swc11b.ping error!!!");
+      NVIC_SystemReset();
     }
     mTxData = true;
   }
@@ -70,19 +71,19 @@ void loop() {
   if (mTxData) {
     mTxData = false;
 
-    SerialUSB.println("wake up swc11b");
+    log_println("wake up swc11b");
     if (SWC11B_OK != swc11b.wakeup()) {
-      SerialUSB.println("wakeup error!!!");
-      return;
+      log_println("wakeup error!!!");
+      NVIC_SystemReset();
     }
 
     // Getting temperature and humidity from sensor.
-    SerialUSB.println("read sensor data");
+    log_println("read sensor data");
     byte data[8] = {0};
     SHT3XD_Result shtResult = tempHumiSensor.readTempAndHumidity(REPEATABILITY_LOW, MODE_CLOCK_STRETCH, 50);
     if ( SHT3XD_NO_ERROR == shtResult.error) {
-      SerialUSB.print("temp ="); SerialUSB.println(shtResult.t);
-      SerialUSB.print("humi ="); SerialUSB.println(shtResult.rh);
+      log_print("temp ="); log_println(shtResult.t);
+      log_print("humi ="); log_println(shtResult.rh);
 
       // Putting data in buffer
       memcpy(data, &shtResult.t, 4);
@@ -90,64 +91,64 @@ void loop() {
     }
 
     // Setting ble advertising data.
-    SerialUSB.println("set ble advertising");
+    log_println("set ble advertising");
     if (SWC11B_OK != swc11b.setBleAdvertisingData(data, sizeof(data))) {
-      SerialUSB.println("swc11b.setBleAdvertisingData error!!!");
-      return;
+      log_println("swc11b.setBleAdvertisingData error!!!");
+      NVIC_SystemReset();
     }
 
     // Sending data via the swc11b
-    SerialUSB.println("send data");
+    log_println("send data");
     if (SWC11B_OK != swc11b.send(data, sizeof(data), 0)) {
-      SerialUSB.println("swc11b.send error!!!");
-      return;
+      log_println("swc11b.send error!!!");
+      NVIC_SystemReset();
     }
   }
 
   if (mTxDone) {
     mTxDone = false;
-    SerialUSB.println("send done");
+    log_println("send done");
 
     int result = 0;
     sscanf(mSentResultBuff, "+SEND:%u", &result);
-    SerialUSB.print("+SEND:"); SerialUSB.println(result);
+    log_print("+SEND:"); log_println(result);
     memset(mSentResultBuff, 0, sizeof(mSentResultBuff));
 
     // Checking if there is data available
     int availableLen = 0;
     if (SWC11B_OK != swc11b.available(&availableLen)) {
-      SerialUSB.println("swc11b.available error!!!");
-      return;
+      log_println("swc11b.available error!!!");
+      NVIC_SystemReset();
     }
 
     if (availableLen > 0) {
-      SerialUSB.print(availableLen); SerialUSB.println(" bytes data available");
+      log_print(availableLen); log_println(" bytes data available");
 
       // Reading data
       byte data[64];
       if (SWC11B_OK != swc11b.readBytes(data, availableLen)) {
-        SerialUSB.println("swc11b.readBytes error!!!");
-        return;
+        log_println("swc11b.readBytes error!!!");
+        NVIC_SystemReset();
       }
-      SerialUSB.print("read data = ");
-      dumpData(data, availableLen);
+      log_print("read data = ");
+      log_dump(data, availableLen);
     } else {
-      SerialUSB.println("no data available");
+      log_println("no data available");
     }
 
     if (SWC11B_OK != swc11b.sleep()) {
-      SerialUSB.println("swc11b.sleep error!!!");
-      return;
+      log_println("swc11b.sleep error!!!");
+      NVIC_SystemReset();
     }
 
-    SerialUSB.println("waiting next tx\r\n");
+    log_println("waiting next tx\r\n");
     mWaitNextTx = true;
     mTimeLast = millis();
   }
 
   if (mOnBleDtu) {
     mOnBleDtu = false;
-    SerialUSB.println("on ble data");
+    log_println("on ble data");
 
     byte hexBuff[64];
     int hexBuffLen = 0;
@@ -155,14 +156,14 @@ void loop() {
     // Decoding the 'hex string' format data, 5 bytes header, "+DTU:"
     hexBuffLen = hexStrDecode(&mBleDtuDataBuff[5], hexBuff);
     if (hexBuffLen != -1) {
-      SerialUSB.print("decode data = ");
-      dumpData(hexBuff, hexBuffLen);
+      log_print("decode data = ");
+      log_dump(hexBuff, hexBuffLen);
     }
     memset(mBleDtuDataBuff, 0, sizeof(mBleDtuDataBuff));
 
     // Sending back the ble data
     if (SWC11B_OK != swc11b.sendBleDtu(hexBuff, hexBuffLen)) {
-      SerialUSB.println("swc11b.sendBleDtu error!!! please check the ble connection state");
+      log_println("swc11b.sendBleDtu error!!! please check the ble connection state");
     }
   }
 
@@ -174,13 +175,10 @@ void loop() {
       mTxData = true;
     }
   }
-
-  delay(1); // This delay must be called for scheduling other loop
 }
 
 void swc11bLoop() {
   swc11b.receiveBytes();
-  delay(1); // This delay must be called for scheduling other loop
 }
 
 /** Function for decode a hex string to a buffer,
@@ -225,11 +223,3 @@ int hexStrDecode(char* pStrIn, byte * pOut)
   }
 }
 
-void dumpData(void *pData, int len)
-{
-  byte *p = (byte *)pData;
-  for (int i = 0; i < len; i++) {
-    SerialUSB.print("0x"); SerialUSB.print(p[i], HEX); SerialUSB.print(' ');
-  }
-  SerialUSB.println();
-}
